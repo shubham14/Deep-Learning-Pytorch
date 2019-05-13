@@ -1,8 +1,10 @@
-
 import numpy as np
+
 from layers import *
 
-class SoftmaxClassifier(object):
+np.random.seed(2)
+
+class LogisticClassifier(object):
   """
   A logistic regression model with optional hidden layers.
   
@@ -14,8 +16,7 @@ class SoftmaxClassifier(object):
   self.params that maps parameter names to numpy arrays.
   """
   
-  def __init__(self, input_dim=28*28, hidden_dim=100, num_classes=10,
-                 weight_scale=1e-3, reg=0.0):
+  def __init__(self, input_dim=100, hidden_dim=None, weight_scale=1e-3, reg=0.0):
     """
     Initialize a new network.
 
@@ -28,7 +29,7 @@ class SoftmaxClassifier(object):
     """
     self.params = {}
     self.reg = reg
-    self.hidden_dim = hidden_dim
+    
     ############################################################################
     # TODO: Initialize the weights and biases of the model. Weights            #
     # should be initialized from a Gaussian with standard deviation equal to   #
@@ -38,16 +39,17 @@ class SoftmaxClassifier(object):
     # and biases (if any) using the keys 'W2' and 'b2'.                        #
     ############################################################################
     if hidden_dim is not None:
-        self.params['W1'] = np.random.normal(0, weight_scale, (input_dim, hidden_dim))
+        self.params['W1'] = np.random.normal(0, weight_scale, (input_dim,hidden_dim))
         self.params['b1'] = np.zeros((1,hidden_dim)) 
-        self.params['W2'] = np.random.normal(0, weight_scale, (num_classes, hidden_dim))
-        self.params['b2'] = np.zeros((1, num_classes))  
+        self.params['W2'] = np.random.normal(0, weight_scale, (1,hidden_dim))
+        self.params['b2'] = np.zeros((1, )) 
     else:
-        self.params['W1'] = np.random.normal(0, weight_scale, (input_dim, num_classes))
-        self.params['b1'] = np.zeros((1, num_classes))
+        self.params['W1'] = np.random.normal(0, weight_scale, (input_dim,1))
+        self.params['b1'] = 0
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
+
 
   def loss(self, X, y=None):
     """
@@ -87,7 +89,7 @@ class SoftmaxClassifier(object):
 
     # If y is None then we are in test mode so just return scores
     if y is None:
-      return scores
+      return scores.reshape(-1)
     
     loss, grads = 0, {}
     ############################################################################
@@ -97,7 +99,7 @@ class SoftmaxClassifier(object):
     # Don't forget to add L2 regularization.                                   #
     #                                                                          #
     ############################################################################
-    loss, dscores = softmax_loss(scores, y)
+    loss, dscores = logistic_loss(scores, y)
     if 'W2' in self.params:
         loss += 0.5 * self.reg * (np.linalg.norm(self.params['W1'])**2 + np.linalg.norm(self.params['W2'])**2)
         grads['W2'] = np.dot(np.transpose(dscores), z1) + self.reg * self.params['W2']
