@@ -1,3 +1,4 @@
+
 import numpy as np
 
 from layers import *
@@ -90,7 +91,7 @@ class CaptioningRNN(object):
         # after receiving word t. The first element of captions_in will be the START
         # token, and the first element of captions_out will be the first word.
         captions_in = captions[:, :-1]
-        captions_out = captions[:, 1:]
+        captions_out = np.transpose(captions[:, 1:], (1, 0)) 
 
         # You'll need this
         mask = (captions_out != self._null)
@@ -132,27 +133,66 @@ class CaptioningRNN(object):
         ############################################################################
 
         # Forward Pass
-        # (1)
+        # (1) 
+        h0, fc_cache = fc_forward(features, W_proj, b_proj)
         
         # (2)
-        
+        embed_feat_in, embed_cache = word_embedding_forward(captions_in, W_embed)
+        embed_feat_in1 =  np.transpose(embed_feat_in, (1, 0, 2))  
+
         # (3)
+        if self.cell_type == 'rnn':
+            hidden_feat, rnn_cache = rnn_forward(embed_feat_in1, h0 ,Wx, Wh, b) 
+        elif self.cell_type == 'lstm':
+            hidden_feat, lstm_cache = lstm_forward(embed_feat_in1, h0, Wx, Wh, b)
         
         # (4)
+        temp_fc_out, temp_fc_cache = temporal_fc_forward(hidden_feat, W_vocab, b_vocab)
         
         # (5)
-
+#        embed_feat_out = word_embedding_forward(captions_out, W_embed)
+        loss, dout = temporal_softmax_loss(temp_fc_out, captions_out, mask)
 
         # Gradients
         # (4)
+        dx_fc_temp, dw_fc_temp, db_fc_temp = temporal_fc_backward(dout, temp_fc_cache)
         
         # (3)
-        
+        if self.cell_type == 'rnn':
+            dx_rnn, dh0_rnn, dWx_rnn, dWh_rnn, db_rnn = rnn_backward(dx_fc_temp, rnn_cache)
+        if self.cell_type == 'lstm':
+            dx_lstm, dh0_lstm, dWx_lstm, dWh_lstm, db_lstm = lstm_backward(dx_fc_temp, lstm_cache)
+          
+            
         # (2)
+        x, W = embed_cache
+        embed_cache = np.transpose(x, (1, 0)), W
+
+        if self.cell_type == 'rnn':
+            dW_embed = word_embedding_backward(dx_rnn, embed_cache)
+        elif self.cell_type == 'lstm':
+            dW_embed = word_embedding_backward(dx_lstm, embed_cache)
         
         # (1)
+        if self.cell_type == 'rnn':
+            dx_fc, dw_fc, db_fc = fc_backward(dh0_rnn, fc_cache)
+        if self.cell_type == 'lstm':
+            dx_fc, dw_fc, db_fc = fc_backward(dh0_lstm, fc_cache)
 
 
+        grads['W_proj'] = dw_fc
+        grads['b_proj'] = db_fc
+        grads['W_vocab'] = dw_fc_temp
+        grads['b_vocab'] = db_fc_temp
+        if self.cell_type == 'rnn':
+            grads['Wx'] = dWx_rnn
+            grads['Wh'] = dWh_rnn
+            grads['b'] = db_rnn
+        if self.cell_type == 'lstm':
+            grads['Wx'] = dWx_lstm
+            grads['Wh'] = dWh_lstm
+            grads['b'] = db_lstm
+        grads['W_embed'] = dW_embed
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -198,7 +238,7 @@ class CaptioningRNN(object):
         # (1) Embed the previous word using the learned word embeddings           #
         # (2) Make an RNN step using the previous hidden state and the embedded   #
         #     current word to get the next hidden state.                          #
-        # (3) Apply the learned fc transformation to the next hidden state to #
+        # (3) Apply the learned affine transformation to the next hidden state to #
         #     get scores for all words in the vocabulary                          #
         # (4) Select the word with the highest score as the next word, writing it #
         #     to the appropriate slot in the captions variable                    #
@@ -210,8 +250,37 @@ class CaptioningRNN(object):
         # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
         # a loop.                                                                 #
         ###########################################################################
-
-
+        # Get first hidden state
+        h0, _ = fc_forward(features, W_proj, b_proj)
+        st_word = self._start
+        prev_h = h0
+        prev_c = np.zeros_like(h0)
+        captions[:, 0] = st_word
+        if self.cell_type == 'rnn':
+            for t in range(max_length):
+                st_word_embed, _ = word_embedding_forward(st_word, W_embed)
+                print(st_word_embed.shape)
+                next_h, cache = rnn_step_forward(st_word_embed, prev_h, Wx, Wh, b)
+                fc_out, fc_cache = fc_forward(next_h, W_vocab, b_vocab)
+                
+                captions[: ,t] = np.argmax(fc_out, axis=1)
+                prev_h = next_h
+                st_word = captions[:, t]
+                if st_word == '<END>':
+                    break
+        elif self.cell_type == 'lstm':
+              for t in range(max_length):
+                st_word_embed, _ = word_embedding_forward(st_word, W_embed)
+                print(st_word_embed.shape)
+                next_h, next_c, cache = lstm_step_forward(st_word_embed, prev_h, prev_c, Wx, Wh, b)
+                fc_out, fc_cache = fc_forward(next_h, W_vocab, b_vocab)
+                
+                captions[: ,t] = np.argmax(fc_out, axis=1)
+                prev_h = next_h
+                prev_c = next_c
+                st_word = captions[:, t]
+                if st_word == '<END>':
+                    break
 
         ############################################################################
         #                             END OF YOUR CODE                             #
